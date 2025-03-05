@@ -13,42 +13,32 @@ export const SpriteBackground = ({ imageSrc, opacity = 0.5 }: SpriteBackgroundPr
   const texture = useLoader(THREE.TextureLoader, imageSrc); // Load texture with useLoader
 
   useEffect(() => {
-    let resizeTimeout: number;
-
-    // Create sprite material and sprite
+    // Create sprite material and sprite with optimized settings
     const spriteMaterial = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
       opacity,
+      sizeAttenuation: false, // Disable size attenuation for better performance
     });
     const sprite = new THREE.Sprite(spriteMaterial);
     spriteRef.current = sprite;
 
+    // Memoize calculations that don't need to be recomputed
+    const aspect = texture.image ? texture.image.width / texture.image.height : 1;
+    const spriteZ = -10;
+
     const updateSpriteScale = () => {
-      if (!spriteRef.current || !texture.image) return;
+      if (!spriteRef.current) return;
 
       const { width, height } = size;
-      const aspect = texture.image.width / texture.image.height;
-      const cameraZ = camera.position.z || 0;
-      const spriteZ = -10;
-      const distance = Math.abs(cameraZ - spriteZ);
+      const viewAspect = width / height;
 
-      let worldHeight: number, worldWidth: number;
-
-      if (camera instanceof THREE.PerspectiveCamera) {
-        const vFOV = THREE.MathUtils.degToRad(camera.fov);
-        worldHeight = 2 * Math.tan(vFOV / 2) * distance;
-        worldWidth = worldHeight * (width / height);
+      // Simplified scaling calculation
+      const scale = 2; // Base scale factor
+      if (aspect > viewAspect) {
+        sprite.scale.set(scale * viewAspect * aspect, scale * viewAspect, 1);
       } else {
-        worldHeight = (camera as THREE.OrthographicCamera).top - (camera as THREE.OrthographicCamera).bottom;
-        worldWidth = worldHeight * (width / height);
-      }
-
-      const spriteAspect = worldWidth / worldHeight;
-      if (aspect > spriteAspect) {
-        sprite.scale.set(worldHeight * aspect, worldHeight, 1);
-      } else {
-        sprite.scale.set(worldWidth, worldWidth / aspect, 1);
+        sprite.scale.set(scale, scale / aspect, 1);
       }
       sprite.position.set(0, 0, spriteZ);
     };
@@ -56,23 +46,32 @@ export const SpriteBackground = ({ imageSrc, opacity = 0.5 }: SpriteBackgroundPr
     updateSpriteScale();
     scene.add(sprite);
 
-    // Debounced resize handler
+    // Use RAF for smoother resize handling
+    let rafId: number;
+    let isResizing = false;
+
     const handleResize = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = window.setTimeout(updateSpriteScale, 100);
+      if (!isResizing) {
+        isResizing = true;
+        rafId = requestAnimationFrame(() => {
+          updateSpriteScale();
+          isResizing = false;
+        });
+      }
     };
-    window.addEventListener('resize', handleResize);
+
+    window.addEventListener('resize', handleResize, { passive: true });
 
     // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize);
-      clearTimeout(resizeTimeout);
+      cancelAnimationFrame(rafId);
       if (spriteRef.current) {
         scene.remove(spriteRef.current);
         spriteRef.current.material.dispose();
-        // No need to dispose texture here as useLoader manages it
       }
     };
+
   }, [scene, camera, size, texture, opacity]); // Texture is now a dependency
 
   return null;

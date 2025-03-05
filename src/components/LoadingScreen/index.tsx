@@ -17,15 +17,17 @@ export const LoadingScreen = ({
   const audioManager = createAudioManager(audioSrc);
 
   useEffect(() => {
-    soundRef.current = audioManager.init();
-    console.log('Loading screen mounted, audio initialized');
+    // Initialize audio only when component is mounted
+    const audio = audioManager.init();
+    soundRef.current = audio;
+
     return () => {
       if (soundRef.current) {
         audioManager.stop(soundRef.current);
-        console.log('Loading screen unmounted, audio stopped');
+        soundRef.current = null;
       }
     };
-  }, []);
+  }, [audioManager]);
 
   const handleStart = () => {
     console.log('Start button clicked');
