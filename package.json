@@ -10,8 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.0.4",
+    "@react-three/rapier": "^2.0.0",
+    "@types/three": "^0.174.0",
+    "howler": "^2.2.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.174.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
