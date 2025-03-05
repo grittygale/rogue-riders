@@ -25,7 +25,7 @@ export const LoadingScreen = ({
         console.log('Loading screen unmounted, audio stopped');
       }
     };
-  }, [audioManager]);
+  }, []);
 
   const handleStart = () => {
     console.log('Start button clicked');
