@@ -3,12 +3,12 @@ import { Howl } from 'howler';
 
 export interface LoadingScreenProps {
   audioSrc?: string;
-  loadDuration?: number;
-  backgroundImage?: string;  // Path to sprite-background.jpg
-  cubeColor?: string;        // Kept for consistency, optional
+  backgroundImage?: string;
+  cubeColor?: string;
   buttonText?: string;
   title?: string;
   onLoadComplete: () => void;
+  isAudioEnabled?: boolean; // New: Audio state
 }
 
 export interface AudioManager {

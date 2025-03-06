@@ -1,3 +1,4 @@
+// src/components/LoadingScreen/SpriteBackground.tsx
 import { useRef, useEffect } from 'react';
 import * as THREE from 'three';
 import { useThree, useLoader } from '@react-three/fiber';
@@ -8,71 +9,52 @@ interface SpriteBackgroundProps {
 }
 
 export const SpriteBackground = ({ imageSrc, opacity = 0.5 }: SpriteBackgroundProps) => {
-  const { scene, camera, size } = useThree();
+  const { scene, size } = useThree();
   const spriteRef = useRef<THREE.Sprite>(null!);
-  const texture = useLoader(THREE.TextureLoader, imageSrc); // Load texture with useLoader
+  const texture = useLoader(THREE.TextureLoader, imageSrc);
 
   useEffect(() => {
-    // Create sprite material and sprite with optimized settings
     const spriteMaterial = new THREE.SpriteMaterial({
       map: texture,
       transparent: true,
       opacity,
-      sizeAttenuation: false, // Disable size attenuation for better performance
+      sizeAttenuation: false,
     });
     const sprite = new THREE.Sprite(spriteMaterial);
     spriteRef.current = sprite;
 
-    // Memoize calculations that don't need to be recomputed
-    const aspect = texture.image ? texture.image.width / texture.image.height : 1;
-    const spriteZ = -10;
-
+    // Calculate aspect ratio and scale based on image
+    const aspect = texture.image.width / texture.image.height || 16 / 9;
     const updateSpriteScale = () => {
       if (!spriteRef.current) return;
-
       const { width, height } = size;
       const viewAspect = width / height;
-
-      // Simplified scaling calculation
       const scale = 2; // Base scale factor
       if (aspect > viewAspect) {
         sprite.scale.set(scale * viewAspect * aspect, scale * viewAspect, 1);
       } else {
         sprite.scale.set(scale, scale / aspect, 1);
       }
-      sprite.position.set(0, 0, spriteZ);
+      sprite.position.set(0, 0, -10);
     };
 
     updateSpriteScale();
     scene.add(sprite);
+    console.log('Sprite background initialized, aspect:', aspect, 'size:', size);
 
-    // Use RAF for smoother resize handling
-    let rafId: number;
-    let isResizing = false;
-
-    const handleResize = () => {
-      if (!isResizing) {
-        isResizing = true;
-        rafId = requestAnimationFrame(() => {
-          updateSpriteScale();
-          isResizing = false;
-        });
-      }
-    };
-
-    window.addEventListener('resize', handleResize, { passive: true });
-
-    // Cleanup
+    // Handle resize
+    const handleResize = () => updateSpriteScale();
+    window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(rafId);
       if (spriteRef.current) {
         scene.remove(spriteRef.current);
         spriteRef.current.material.dispose();
+        (spriteRef.current.material.map as THREE.Texture).dispose();
+        console.log('Sprite background cleaned up');
       }
     };
-
-  }, [scene, camera, size, texture, opacity]); // Texture is now a dependency
+  }, [scene, texture, opacity, size]); // Removed camera to avoid re-renders
 
   return null;
 };
