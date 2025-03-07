@@ -13,9 +13,10 @@ type MovementKeys = Record<keyof typeof MOVEMENT_KEYS, boolean>;
 
 interface BallProps {
   onMove: (dx: number, dz: number) => void;
+  color?: string;
 }
 
-const Ball = ({ onMove }: BallProps) => {
+const Ball = ({ onMove, color = "#FF0000" }: BallProps) => {
   const ballRef = useRef<THREE.Mesh>(null);
   const keys = useRef<MovementKeys>({ ...MOVEMENT_KEYS });
   const speed = 2;
@@ -65,7 +66,7 @@ const Ball = ({ onMove }: BallProps) => {
   return (
     <mesh ref={ballRef} position={[0, 5, 0]} castShadow>
       <sphereGeometry args={[5, 32, 32]} />
-      <meshStandardMaterial color="red" />
+      <meshStandardMaterial color={color} />
     </mesh>
   );
 };

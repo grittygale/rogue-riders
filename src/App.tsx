@@ -6,7 +6,7 @@ import { AudioToggleButton } from "./components/audio-togglebutton";
 import Terrain from "./game/terrain";
 
 export default function App() {
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(true);
   const [isAudioEnabled, setIsAudioEnabled] = useState(true); // Manage audio state
 
   console.log(
