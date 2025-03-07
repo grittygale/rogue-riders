@@ -3,6 +3,7 @@ import { OrbitControls } from "@react-three/drei";
 import { useState, memo, useEffect, useRef } from "react";
 import Ground from "./components/Ground";
 import Ball from "./components/Ball";
+import OtherPlayer from "./components/OtherPlayer";
 import { Client, Room } from "colyseus.js";
 
 interface PlayerState {
@@ -16,19 +17,44 @@ interface RoomState {
   players: Map<string, PlayerState>;
 }
 
+const POSITION_QUANTUM = 0.25; // Match server's quantum
+
 const client = new Client("http://localhost:2567");
 
 const Terrain = memo(() => {
   const roomRef = useRef<Room>(null);
   const connectionInProgress = useRef<boolean>(false);
   const [playerColor, setPlayerColor] = useState("#FF0000");
+  const [playerPosition, setPlayerPosition] = useState<
+    [number, number, number]
+  >([0, 5, 0]);
+  const [otherPlayers, setOtherPlayers] = useState<Map<string, PlayerState>>(
+    new Map()
+  );
 
-  const [groundPos, setGroundPos] = useState<[number, number, number]>([
-    0, 0, 0,
-  ]);
+  const quantizePosition = (value: number): number => {
+    return Math.round(value / POSITION_QUANTUM) * POSITION_QUANTUM;
+  };
 
   const handleBallMove = (dx: number, dz: number) => {
-    setGroundPos((prev) => [prev[0] - dx, prev[1], prev[2] - dz]);
+    if (!roomRef.current) return;
+
+    // Update local position with quantized values
+    setPlayerPosition((prev) => {
+      const newX = quantizePosition(prev[0] + dx);
+      const newZ = quantizePosition(prev[2] + dz);
+
+      // Only send update if position actually changed after quantization
+      if (newX !== prev[0] || newZ !== prev[2]) {
+        // Send position update to server
+        roomRef.current?.send("updatePosition", {
+          x: newX,
+          z: newZ,
+        });
+      }
+
+      return [newX, prev[1], newZ];
+    });
   };
 
   /// Colyseus Room Service ///
@@ -55,17 +81,23 @@ const Terrain = memo(() => {
 
         // handle room events here
         room.onStateChange((state) => {
-          // Get our player's color from the state
+          // Get our player's data from the state
           const player = state.players.get(room.sessionId);
           if (player) {
             setPlayerColor(player.color);
+            setPlayerPosition([player.x, player.y, player.z]);
           }
-          console.log({ state });
+
+          // Update other players
+          const others = new Map(state.players);
+          others.delete(room.sessionId); // Remove our own player
+          setOtherPlayers(others);
         });
 
         room.onLeave((code) => {
           console.log("Left room:", code);
           roomRef.current = null;
+          setOtherPlayers(new Map()); // Clear other players
         });
       } catch (error) {
         console.error("Failed to join room:", error);
@@ -88,8 +120,6 @@ const Terrain = memo(() => {
     };
   }, []); // Empty dependency array since we want this to run once
 
-  // End of Room Service ///
-
   return (
     <Canvas
       camera={{ position: [0, 50, 150], fov: 60 }}
@@ -110,8 +140,22 @@ const Terrain = memo(() => {
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
       />
-      <Ground position={groundPos} />
-      <Ball onMove={handleBallMove} color={playerColor} />
+      <Ground position={[0, 0, 0]} />
+      <Ball
+        onMove={handleBallMove}
+        color={playerColor}
+        position={playerPosition}
+      />
+
+      {/* Render other players */}
+      {Array.from(otherPlayers.entries()).map(([id, player]) => (
+        <OtherPlayer
+          key={id}
+          color={player.color}
+          position={[player.x, player.y, player.z]}
+        />
+      ))}
+
       <OrbitControls enableRotate={false} />
     </Canvas>
   );

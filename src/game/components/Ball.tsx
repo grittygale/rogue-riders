@@ -14,12 +14,20 @@ type MovementKeys = Record<keyof typeof MOVEMENT_KEYS, boolean>;
 interface BallProps {
   onMove: (dx: number, dz: number) => void;
   color?: string;
+  position: [number, number, number];
 }
 
-const Ball = ({ onMove, color = "#FF0000" }: BallProps) => {
+const Ball = ({ onMove, color = "#FF0000", position }: BallProps) => {
   const ballRef = useRef<THREE.Mesh>(null);
   const keys = useRef<MovementKeys>({ ...MOVEMENT_KEYS });
   const speed = 2;
+
+  // Update position when it changes
+  useEffect(() => {
+    if (ballRef.current) {
+      ballRef.current.position.set(...position);
+    }
+  }, [position]);
 
   const handleKeyChange = useCallback(
     (event: KeyboardEvent, pressed: boolean) => {
@@ -64,7 +72,7 @@ const Ball = ({ onMove, color = "#FF0000" }: BallProps) => {
   });
 
   return (
-    <mesh ref={ballRef} position={[0, 5, 0]} castShadow>
+    <mesh ref={ballRef} position={position} castShadow>
       <sphereGeometry args={[5, 32, 32]} />
       <meshStandardMaterial color={color} />
     </mesh>
