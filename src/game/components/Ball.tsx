@@ -15,9 +15,10 @@ interface BallProps {
   onMove: (dx: number, dz: number) => void;
   color?: string;
   position: [number, number, number];
+  velocity: [number, number];
 }
 
-const Ball = ({ onMove, color = "#FF0000", position }: BallProps) => {
+const Ball = ({ onMove, color = "#FF0000", position, velocity }: BallProps) => {
   const ballRef = useRef<THREE.Mesh>(null);
   const keys = useRef<MovementKeys>({ ...MOVEMENT_KEYS });
   const speed = 2;
@@ -65,8 +66,6 @@ const Ball = ({ onMove, color = "#FF0000", position }: BallProps) => {
     if (keys.current.d) dx += speed;
 
     if (dx !== 0 || dz !== 0) {
-      ballRef.current.position.x += dx;
-      ballRef.current.position.z += dz;
       onMove(dx, dz);
     }
   });

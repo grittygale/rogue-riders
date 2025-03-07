@@ -14,6 +14,8 @@ interface GameMessage {
 interface UpdatePositionMessage {
   x: number;
   z: number;
+  velocityX: number;
+  velocityZ: number;
 }
 
 const PLAYER_COLORS = [
@@ -25,12 +27,17 @@ const PLAYER_COLORS = [
 
 const LOBBY_SIZE = 100; // Size of the lobby area
 const POSITION_QUANTUM = 0.25; // Quarter-unit precision for position quantization
+const BALL_RADIUS = 5; // Radius of each ball
+const COLLISION_COOLDOWN = 200; // Minimum time (ms) between collisions for the same ball
+const RESTITUTION = 0.8; // Bounciness factor (1 = perfect elastic collision)
+const FRICTION = 0.98; // Friction factor (applied to velocity each update)
 
 export class MyRoom extends Room<MyRoomState> {
   maxClients = 4;
   state = new MyRoomState();
   private clientIds = new Set<string>();
   private usedColors = new Set<string>();
+  private lastUpdateTime = Date.now();
 
   private quantizePosition(value: number): number {
     return Math.round(value / POSITION_QUANTUM) * POSITION_QUANTUM;
@@ -46,6 +53,101 @@ export class MyRoom extends Room<MyRoomState> {
         // Quantize positions before updating state
         player.x = this.quantizePosition(message.x);
         player.z = this.quantizePosition(message.z);
+        player.velocityX = message.velocityX;
+        player.velocityZ = message.velocityZ;
+
+        // Check for collisions with other players
+        this.checkCollisions(player, client.sessionId);
+      }
+    });
+
+    // Set up physics update interval
+    this.setSimulationInterval(() => this.updatePhysics());
+  }
+
+  private checkCollisions(player: PlayerState, playerId: string) {
+    const now = Date.now();
+    if (now - player.lastCollisionTime < COLLISION_COOLDOWN) return;
+
+    this.state.players.forEach((otherPlayer, otherId) => {
+      if (otherId === playerId) return;
+
+      const dx = player.x - otherPlayer.x;
+      const dz = player.z - otherPlayer.z;
+      const distance = Math.sqrt(dx * dx + dz * dz);
+
+      // Check if balls are colliding
+      if (distance < BALL_RADIUS * 2) {
+        // Only process if other ball hasn't recently collided
+        if (now - otherPlayer.lastCollisionTime >= COLLISION_COOLDOWN) {
+          this.resolveCollision(player, otherPlayer);
+          player.lastCollisionTime = now;
+          otherPlayer.lastCollisionTime = now;
+        }
+      }
+    });
+  }
+
+  private resolveCollision(ball1: PlayerState, ball2: PlayerState) {
+    // Calculate collision normal
+    const dx = ball2.x - ball1.x;
+    const dz = ball2.z - ball1.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    // Normalize the collision vector
+    const nx = dx / distance;
+    const nz = dz / distance;
+
+    // Relative velocity
+    const rvx = ball2.velocityX - ball1.velocityX;
+    const rvz = ball2.velocityZ - ball1.velocityZ;
+
+    // Relative velocity along normal
+    const velAlongNormal = rvx * nx + rvz * nz;
+
+    // Don't resolve if objects are moving apart
+    if (velAlongNormal > 0) return;
+
+    // Calculate impulse scalar
+    const j = -(1 + RESTITUTION) * velAlongNormal;
+    const impulseX = j * nx;
+    const impulseZ = j * nz;
+
+    // Apply impulse
+    ball1.velocityX -= impulseX;
+    ball1.velocityZ -= impulseZ;
+    ball2.velocityX += impulseX;
+    ball2.velocityZ += impulseZ;
+
+    // Separate the balls to prevent sticking
+    const overlap = (BALL_RADIUS * 2) - distance;
+    const separationX = (overlap * nx) / 2;
+    const separationZ = (overlap * nz) / 2;
+
+    ball1.x = this.quantizePosition(ball1.x - separationX);
+    ball1.z = this.quantizePosition(ball1.z - separationZ);
+    ball2.x = this.quantizePosition(ball2.x + separationX);
+    ball2.z = this.quantizePosition(ball2.z + separationZ);
+  }
+
+  private updatePhysics() {
+    const now = Date.now();
+    const dt = (now - this.lastUpdateTime) / 1000; // Convert to seconds
+    this.lastUpdateTime = now;
+
+    // Update positions based on velocities
+    this.state.players.forEach(player => {
+      // Apply friction
+      player.velocityX *= FRICTION;
+      player.velocityZ *= FRICTION;
+
+      // Update positions
+      if (Math.abs(player.velocityX) > 0.01 || Math.abs(player.velocityZ) > 0.01) {
+        player.x = this.quantizePosition(player.x + player.velocityX * dt);
+        player.z = this.quantizePosition(player.z + player.velocityZ * dt);
+      } else {
+        player.velocityX = 0;
+        player.velocityZ = 0;
       }
     });
   }

@@ -1,9 +1,9 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
-import { useState, memo, useEffect, useRef } from "react";
+import { useState, memo, useEffect, useRef, useMemo } from "react";
 import Ground from "./components/Ground";
 import Ball from "./components/Ball";
-import OtherPlayer from "./components/OtherPlayer";
+import Players from "./components/Players";
 import { Client, Room } from "colyseus.js";
 
 interface PlayerState {
@@ -11,6 +11,9 @@ interface PlayerState {
   x: number;
   y: number;
   z: number;
+  velocityX: number;
+  velocityZ: number;
+  lastCollisionTime: number;
 }
 
 interface RoomState {
@@ -18,6 +21,8 @@ interface RoomState {
 }
 
 const POSITION_QUANTUM = 0.25; // Match server's quantum
+const MOVEMENT_SPEED = 40; // Base movement speed
+const MOVEMENT_DAMPING = 0.2; // How quickly to reach target velocity
 
 const client = new Client("http://localhost:2567");
 
@@ -28,9 +33,22 @@ const Terrain = memo(() => {
   const [playerPosition, setPlayerPosition] = useState<
     [number, number, number]
   >([0, 5, 0]);
+  const [playerVelocity, setPlayerVelocity] = useState<[number, number]>([
+    0, 0,
+  ]);
   const [otherPlayers, setOtherPlayers] = useState<Map<string, PlayerState>>(
     new Map()
   );
+
+  // Convert other players map to array for optimized rendering
+  const otherPlayersArray = useMemo(() => {
+    return Array.from(otherPlayers.entries()).map(([id, player]) => ({
+      id,
+      color: player.color,
+      position: [player.x, player.y, player.z] as [number, number, number],
+      velocity: [player.velocityX, player.velocityZ] as [number, number],
+    }));
+  }, [otherPlayers]);
 
   const quantizePosition = (value: number): number => {
     return Math.round(value / POSITION_QUANTUM) * POSITION_QUANTUM;
@@ -39,19 +57,31 @@ const Terrain = memo(() => {
   const handleBallMove = (dx: number, dz: number) => {
     if (!roomRef.current) return;
 
+    // Calculate target velocity based on input
+    const targetVelocityX = dx * MOVEMENT_SPEED;
+    const targetVelocityZ = dz * MOVEMENT_SPEED;
+
+    // Update velocity with damping
+    setPlayerVelocity((prev) => {
+      const newVelocityX =
+        prev[0] + (targetVelocityX - prev[0]) * MOVEMENT_DAMPING;
+      const newVelocityZ =
+        prev[1] + (targetVelocityZ - prev[1]) * MOVEMENT_DAMPING;
+      return [newVelocityX, newVelocityZ];
+    });
+
     // Update local position with quantized values
     setPlayerPosition((prev) => {
       const newX = quantizePosition(prev[0] + dx);
       const newZ = quantizePosition(prev[2] + dz);
 
-      // Only send update if position actually changed after quantization
-      if (newX !== prev[0] || newZ !== prev[2]) {
-        // Send position update to server
-        roomRef.current?.send("updatePosition", {
-          x: newX,
-          z: newZ,
-        });
-      }
+      // Send position and velocity update to server
+      roomRef.current?.send("updatePosition", {
+        x: newX,
+        z: newZ,
+        velocityX: playerVelocity[0],
+        velocityZ: playerVelocity[1],
+      });
 
       return [newX, prev[1], newZ];
     });
@@ -86,6 +116,7 @@ const Terrain = memo(() => {
           if (player) {
             setPlayerColor(player.color);
             setPlayerPosition([player.x, player.y, player.z]);
+            setPlayerVelocity([player.velocityX, player.velocityZ]);
           }
 
           // Update other players
@@ -145,16 +176,11 @@ const Terrain = memo(() => {
         onMove={handleBallMove}
         color={playerColor}
         position={playerPosition}
+        velocity={playerVelocity}
       />
 
-      {/* Render other players */}
-      {Array.from(otherPlayers.entries()).map(([id, player]) => (
-        <OtherPlayer
-          key={id}
-          color={player.color}
-          position={[player.x, player.y, player.z]}
-        />
-      ))}
+      {/* Render other players using optimized instanced mesh */}
+      {otherPlayersArray.length > 0 && <Players players={otherPlayersArray} />}
 
       <OrbitControls enableRotate={false} />
     </Canvas>
